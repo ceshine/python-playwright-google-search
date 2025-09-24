@@ -1,0 +1,28 @@
+[project]
+name = "playwright-google-search"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.12.3",
+    "playwright>=1.55.0",
+    "beautifulsoup4>=4.13.5",
+    "typer>=0.19.2",
+]
+
+[project.scripts]
+google-search-server = "playwright_google_search.mcp:mcp.run"
+google-search-cli = "playwright_google_search.cli:app"
+
+[tool.pyright]
+reportCallInDefaultInitializer = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[[project.authors]]
+name = "Ceshine Lee"
+email = "shuanck@gmail.com"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/playwright_google_search"]
