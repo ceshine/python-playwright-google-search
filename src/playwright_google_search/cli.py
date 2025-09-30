@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-import json
 import asyncio
+import json
 
 import typer
 
+from .page_content import fetch_page_markdown
 from .search import google_search, get_google_search_page_html
 
-app = typer.Typer(help="A Google search CLI tool based on Playwright")
+app = typer.Typer(help="A Google search CLI tool based on Playwright", pretty_exceptions_short=True)
 
 
 @app.command()
-def main(
+def google_search_command(
     query: str = typer.Argument(..., help="Search keyword"),
     limit: int = typer.Option(10, "-l", "--limit", help="Limit the number of results"),
     timeout: int = typer.Option(30000, "-t", "--timeout", help="Timeout in milliseconds"),
@@ -83,6 +84,22 @@ def main(
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run())
     loop.close()
+
+
+@app.command("fetch-markdown")
+def fetch_markdown_command(
+    url: str = typer.Argument(..., help="URL to fetch and convert to Markdown"),
+    timeout: int = typer.Option(60000, "-t", "--timeout", help="Timeout in milliseconds"),
+):
+    """Render a web page using Playwright and output its Markdown content."""
+
+    try:
+        markdown = fetch_page_markdown(url=url, timeout=timeout)
+    except Exception as exc:  # pragma: no cover - surfaces runtime issues to users
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(markdown)
 
 
 if __name__ == "__main__":
