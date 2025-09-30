@@ -37,11 +37,11 @@ def convert_html_to_markdown(html: str, url: str) -> str:
     return markdown_doc.text_content
 
 
-async def fetch_page_markdown_async(url: str, timeout: int = 60000) -> str:
+async def fetch_page_markdown_async(url: str, timeout: int = 60000, headless: bool = False) -> str:
     """Fetch the page at ``url`` and return its Markdown representation."""
 
     try:
-        html = await _render_page_html(url=url, timeout=timeout)
+        html = await _render_page_html(url=url, timeout=timeout, headless=headless)
     except PlaywrightTimeoutError as exc:  # pragma: no cover - runtime safeguard
         raise RuntimeError(f"Timed out while loading page: {url}") from exc
     except PlaywrightError as exc:  # pragma: no cover - runtime safeguard
@@ -50,12 +50,12 @@ async def fetch_page_markdown_async(url: str, timeout: int = 60000) -> str:
     return convert_html_to_markdown(html=html, url=url)
 
 
-def fetch_page_markdown(url: str, timeout: int = 60000) -> str:
+def fetch_page_markdown(url: str, timeout: int = 60000, headless: bool = False) -> str:
     """Blocking wrapper that returns the Markdown content of ``url``."""
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(fetch_page_markdown_async(url=url, timeout=timeout))
+        return loop.run_until_complete(fetch_page_markdown_async(url=url, timeout=timeout, headless=headless))
     finally:
         loop.close()

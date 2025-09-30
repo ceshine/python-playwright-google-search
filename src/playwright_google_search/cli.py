@@ -7,10 +7,10 @@ import typer
 from .page_content import fetch_page_markdown
 from .search import google_search, get_google_search_page_html
 
-app = typer.Typer(help="A Google search CLI tool based on Playwright", pretty_exceptions_short=True)
+APP = typer.Typer(help="A Google search CLI tool based on Playwright", pretty_exceptions_short=True)
 
 
-@app.command()
+@APP.command()
 def google_search_command(
     query: str = typer.Argument(..., help="Search keyword"),
     limit: int = typer.Option(10, "-l", "--limit", help="Limit the number of results"),
@@ -86,7 +86,7 @@ def google_search_command(
     loop.close()
 
 
-@app.command("fetch-markdown")
+@APP.command("fetch-markdown")
 def fetch_markdown_command(
     url: str = typer.Argument(..., help="URL to fetch and convert to Markdown"),
     timeout: int = typer.Option(60000, "-t", "--timeout", help="Timeout in milliseconds"),
@@ -103,4 +103,4 @@ def fetch_markdown_command(
 
 
 if __name__ == "__main__":
-    app()
+    APP()

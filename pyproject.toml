@@ -11,8 +11,8 @@ dependencies = [
 ]
 
 [project.scripts]
-google-search-server = "playwright_google_search.mcp:mcp.run"
-google-search-cli = "playwright_google_search.cli:app"
+google-search-server = "playwright_google_search.mcp_server:MCP.run"
+google-search-cli = "playwright_google_search.cli:APP"
 
 [tool.pyright]
 reportCallInDefaultInitializer = false
