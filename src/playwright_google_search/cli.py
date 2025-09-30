@@ -79,7 +79,10 @@ def main(
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
 
-    asyncio.run(run())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(run())
+    loop.close()
 
 
 if __name__ == "__main__":
