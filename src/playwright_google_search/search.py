@@ -1,21 +1,15 @@
-import re
-import json
-import random
-import logging
 import asyncio
+import logging
+import random
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from bs4 import BeautifulSoup
-from playwright.async_api import (
-    Browser,
-    BrowserContext,
-    Page,
-    Playwright,
-    Error as PlaywrightError,
-    async_playwright,
-)
+from playwright.async_api import Error as PlaywrightError, Page, async_playwright
+
+from .browser_utils import launch_browser, persist_state, prepare_context_page
 
 # --- Logger Setup ---
 log_dir = Path.home() / ".playwright-google-search"
@@ -25,11 +19,16 @@ log_file_path = log_dir / "google-search.log"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 LOGGER = logging.getLogger(__name__)
-handler = logging.FileHandler(log_file_path)
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(formatter)
-LOGGER.addHandler(handler)
+try:
+    handler = logging.FileHandler(log_file_path)
+except OSError as exc:  # pragma: no cover - filesystem restriction safe-guard
+    LOGGER.addHandler(logging.NullHandler())
+    LOGGER.debug("Failed to attach file handler for search logging: %s", exc)
+else:
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
 
 
 # --- Constants ---
@@ -63,163 +62,6 @@ SEARCH_INPUT_SELECTORS = [
     "input[aria-label='Search']",
     "textarea",
 ]
-CHROMIUM_LAUNCH_ARGS = [
-    "--disable-blink-features=AutomationControlled",
-    "--disable-features=IsolateOrigins,site-per-process",
-    "--disable-site-isolation-trials",
-    "--disable-web-security",
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-accelerated-2d-canvas",
-    "--no-first-run",
-    "--no-zygote",
-    "--disable-gpu",
-    "--hide-scrollbars",
-    "--mute-audio",
-    "--disable-background-networking",
-    "--disable-background-timer-throttling",
-    "--disable-backgrounding-occluded-windows",
-    "--disable-breakpad",
-    "--disable-component-extensions-with-background-pages",
-    "--disable-extensions",
-    "--disable-features=TranslateUI",
-    "--disable-ipc-flooding-protection",
-    "--disable-renderer-backgrounding",
-    "--enable-features=NetworkService,NetworkServiceInProcess",
-    "--force-color-profile=srgb",
-    "--metrics-recording-only",
-]
-
-
-# --- Helper Functions ---
-async def _create_browser_context(
-    p: Playwright,
-    browser: Browser,
-    state_file: Path,
-    locale: str,
-) -> tuple[BrowserContext, dict[str, Any]]:
-    """Create and configure a Playwright BrowserContext with persistent fingerprinting/state.
-
-    This helper initializes a BrowserContext tailored for desktop-like browsing and attempts to restore or
-    synthesize a lightweight "fingerprint" to reduce detection by sites (for example Google).
-
-    The function will read a storage state file (if present) and a companion fingerprint JSON file to restore
-    prior settings such as device name, locale, timezone and color scheme.
-
-    When no fingerprint exists, a host fingerprint is synthesized and returned
-    as part of the saved_state.
-
-    Args:
-        p (Playwright): The active Playwright instance (from async_playwright()).
-        browser (Browser): A launched Playwright Browser instance (typically chromium).
-        state_file (Path): Path to a JSON file that may contain a Playwright
-            storage state. If present, its path will be passed to the context
-            as storage_state, and a companion fingerprint file
-            (state_file.with_suffix(".json-fingerprint.json")) will be read.
-        locale (str): Preferred locale (e.g. "en-US") to use when no saved
-            fingerprint locale is available.
-
-    Returns:
-        tuple[BrowserContext, dict[str, Any]]:
-            A tuple containing the newly created BrowserContext and a dictionary representing the saved fingerprint/state metadata.
-            The saved_state will always include a "fingerprint" key after the call (either loaded from disk or synthesized).
-
-    Raises:
-        Any exception raised while reading files or creating the context (e.g. file I/O errors, Playwright errors) will propagate to the caller.
-
-    Notes:
-        - The created context is configured with a desktop viewport, common permissions (geolocation, notifications), and options intended to
-          mimic a regular browser session.
-        - An init script is injected to modify common navigator and WebGL properties to help mask automation artifacts (navigator.webdriver,
-          plugins, languages, chrome runtime, WebGL parameters).
-        - The function does not close the provided browser; the caller is responsible for closing the context and browser when finished.
-
-    Example:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch()
-            context, saved_state = await _create_browser_context(
-                p, browser, Path("browser-state.json"), "en-US"
-            )
-    """
-    storage_state_path_str = str(state_file) if state_file.exists() else None
-
-    # Load the fingerprint if exists
-    saved_state = {}
-    fingerprint_file = state_file.with_suffix(".json-fingerprint.json")
-    if fingerprint_file.exists():
-        with open(fingerprint_file, "r") as f:
-            saved_state = json.load(f)
-            assert isinstance(saved_state, dict)
-
-    # We always use Chromium for now
-    # device_list = ["Desktop Chrome", "Desktop Edge", "Desktop Firefox", "Desktop Safari"]
-    device_name = saved_state.get("fingerprint", {}).get("deviceName")
-    if not device_name or device_name not in p.devices:
-        device_name = "Desktop Chrome"  # We always use Chromium for now
-
-    device_config = p.devices[device_name]
-    context_options = {**device_config}
-
-    if "fingerprint" in saved_state:
-        context_options.update(
-            {
-                "locale": saved_state["fingerprint"]["locale"],
-                "timezone_id": saved_state["fingerprint"]["timezoneId"],
-                "color_scheme": saved_state["fingerprint"]["colorScheme"],
-            }
-        )
-    else:
-        host_config = {
-            "deviceName": device_name,
-            "locale": locale,
-            "timezoneId": "America/New_York",
-            "colorScheme": "dark" if datetime.now().hour >= 19 or datetime.now().hour < 7 else "light",
-            "reducedMotion": "no-preference",
-            "forcedColors": "none",
-        }
-        context_options.update(
-            {
-                "locale": host_config["locale"],
-                "timezone_id": host_config["timezoneId"],
-                "color_scheme": host_config["colorScheme"],
-            }
-        )
-        saved_state["fingerprint"] = host_config
-
-    context_options.update(
-        {
-            "viewport": {"width": 1920, "height": 1080},
-            "permissions": ["geolocation", "notifications"],
-            "accept_downloads": True,
-            "is_mobile": False,
-            "has_touch": False,
-            "java_script_enabled": True,
-        }
-    )
-
-    if storage_state_path_str:
-        context_options["storage_state"] = storage_state_path_str
-
-    context = await browser.new_context(**context_options)
-
-    await context.add_init_script(
-        """
-        Object.defineProperty(navigator, 'webdriver', { get: () => false });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
-        if (typeof WebGLRenderingContext !== 'undefined') {
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                if (parameter === 37445) { return 'Intel Inc.'; }
-                if (parameter === 37446) { return 'Intel Iris OpenGL Engine'; }
-                return getParameter.call(this, parameter);
-            };
-        }
-        """
-    )
-    return context, saved_state
 
 
 async def _navigate_and_search(
@@ -393,41 +235,6 @@ async def _extract_results(page: Page, limit: int) -> list[dict[str, str]]:
 # --- Shared Utilities ---
 
 
-async def _launch_browser(p: Playwright, headless_mode: bool) -> Browser:
-    LOGGER.info("Launching browser in %s mode...", "headless" if headless_mode else "headed")
-    return await p.chromium.launch(
-        headless=headless_mode,
-        args=CHROMIUM_LAUNCH_ARGS,
-        ignore_default_args=["--enable-automation"],
-    )
-
-
-async def _prepare_context_page(
-    p: Playwright,
-    browser: Browser,
-    state_file: str,
-    locale: str,
-) -> tuple[BrowserContext, Page, dict[str, Any], Path]:
-    state_file_path = Path(state_file)
-    context, saved_state = await _create_browser_context(p, browser, state_file_path, locale)
-    page = await context.new_page()
-    return context, page, saved_state, state_file_path
-
-
-async def _persist_state_if_needed(
-    context: BrowserContext,
-    state_file_path: Path,
-    saved_state: dict[str, Any],
-    no_save_state: bool,
-) -> None:
-    if no_save_state:
-        return
-    _ = await context.storage_state(path=str(state_file_path))
-    fingerprint_file = state_file_path.with_suffix(".json-fingerprint.json")
-    with open(fingerprint_file, "w") as f:
-        json.dump(saved_state, f, indent=2)
-
-
 def _is_human_verification_error(e: Exception) -> bool:
     return "Human verification" in str(e)
 
@@ -443,27 +250,29 @@ async def google_search(
     headless: bool = True,
 ) -> dict[str, Any]:
     async with async_playwright() as p:
-        headless_mode = headless
         for _ in range(2):
-            browser = await _launch_browser(p, headless_mode)
+            browser = await launch_browser(p, headless)
             context = None
             try:
-                context, page, saved_state, state_file_path = await _prepare_context_page(
-                    p, browser, state_file, locale
-                )
+                (
+                    context,
+                    page,
+                    saved_state,
+                    state_file_path,
+                ) = await prepare_context_page(p, browser, state_file, locale)
 
-                await _navigate_and_search(page, query, timeout, saved_state, headless_mode)
+                await _navigate_and_search(page, query, timeout, saved_state, headless)
                 results = await _extract_results(page, limit)
 
-                await _persist_state_if_needed(context, state_file_path, saved_state, no_save_state)
+                await persist_state(context, state_file_path, saved_state, no_save_state)
 
                 return {"query": query, "results": results}
 
             except PlaywrightError as e:
                 if _is_human_verification_error(e):
-                    if headless_mode:
+                    if headless:
                         LOGGER.warning("Human verification detected, restarting in headed mode.")
-                        headless_mode = False
+                        headless = False
                         # retry on next loop iteration
                     else:
                         break
@@ -495,12 +304,15 @@ async def get_google_search_page_html(
     async with async_playwright() as p:
         headless_mode = headless
         for _ in range(2):
-            browser = await _launch_browser(p, headless_mode)
+            browser = await launch_browser(p, headless_mode)
             context = None
             try:
-                context, page, saved_state, state_file_path = await _prepare_context_page(
-                    p, browser, state_file, locale
-                )
+                (
+                    context,
+                    page,
+                    saved_state,
+                    state_file_path,
+                ) = await prepare_context_page(p, browser, state_file, locale)
 
                 await _navigate_and_search(page, query, timeout, saved_state, headless_mode)
 
@@ -533,7 +345,7 @@ async def get_google_search_page_html(
                     _ = await page.screenshot(path=str(screenshot_path), full_page=True)
                     result["screenshotPath"] = str(screenshot_path)
 
-                await _persist_state_if_needed(context, state_file_path, saved_state, no_save_state)
+                await persist_state(context, state_file_path, saved_state, no_save_state)
 
                 return result
 

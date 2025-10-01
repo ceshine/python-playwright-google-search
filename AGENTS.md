@@ -62,12 +62,12 @@ This project uses uv for Python setup and dependency management.
 - Run all tools and scripts via uv:
   - uv run pytest
   - uv run python path/to/script.py
-  - uvx ruff check .
+  - uv run ruff check .
 
 Pre-Submission Check:
 
-- After committing your work and before submitting it for review, always run a final lint check (i.e., `uvx ruff check .`) within the working subproject folder to catch any remaining issues.
-- Additionally, format the code using `uvx ruff format --line-length 120`.
+- After committing your work and before submitting it for review, always run a final lint check (i.e., `uv run ruff check .`) within the working subproject folder to catch any remaining issues.
+- Additionally, format the code using `uv run ruff format --line-length 120`.
 
 Guidelines for commands and CI:
 

@@ -7,11 +7,13 @@ dependencies = [
     "playwright>=1.55.0",
     "beautifulsoup4>=4.13.5",
     "typer>=0.19.2",
+    "markitdown[all]>=0.1.3",
 ]
 
 [project.scripts]
-google-search-server = "playwright_google_search.mcp:mcp.run"
-google-search-cli = "playwright_google_search.cli:app"
+google-search-mcp-server = "playwright_google_search.mcp_server:MCP.run"
+google-search-cli = "playwright_google_search.cli:APP"
+google-search-mcp-cli = "playwright_google_search.mcp_client:APP"
 
 [tool.pyright]
 reportCallInDefaultInitializer = false
@@ -19,6 +21,14 @@ reportCallInDefaultInitializer = false
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.31.5",
+    "pytest>=8.4.2",
+    "pytest-env>=1.1.5",
+    "ruff>=0.13.2",
+]
 
 [[project.authors]]
 name = "Ceshine Lee"

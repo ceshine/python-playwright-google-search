@@ -1,41 +1,75 @@
-# Google Search CLI & MCP Powered by Playwright
+# Playwright-Powered Google Search and Fetch Tools
 
-A Python port of the Google Search tool from [web-agent-master/google-search](https://github.com/web-agent-master/google-search), originally built for Node.js. It provides:
+A Python-based Google Search tool powered by Playwright, providing both a command-line interface (CLI) and a Model-graded Contextual Processor (MCP) server.
 
-- A simple command-line interface for running Google searches
-- A Model Context Protocol (MCP) server for agent integration
+This project is a Python port and enhancement of the original Node.js version from [web-agent-master/google-search](https://github.com/web-agent-master/google-search). It's designed for reliability and flexibility, driving a real browser to deliver accurate, real-time search results.
 
-Built on Playwright to drive a real browser for reliable results.
+## Features
+
+- **CLI & MCP Server**: Use it as a standalone CLI or as a tool server for AI agents.
+- **Real Browser Integration**: Leverages Playwright to mimic human-like browsing and avoid blocking.
+- **Markdown Conversion**: Includes a tool to fetch and convert web page content to clean Markdown.
+- **Customizable**: Offers options for headless browsing, session state management, and more.
+
+## Python Environment (uv)
+
+This project uses `uv` for Python environment and dependency management.
+
+- **Prepare the environment** (creates/updates the virtualenv from the lockfile):
+  ```bash
+  uv sync --frozen
+  ```
+
+- **Run all tools and scripts** via `uv`:
+  ```bash
+  uv run pytest
+  uv run python path/to/script.py
+  uv run ruff check .
+  ```
+
+- **Format code**:
+  ```bash
+  uv run ruff format --line-length 120
+  ```
 
 ## Installation
 
-To install the package and its dependencies, you can use `pip`:
+To set up the project and install dependencies, follow these steps:
 
-```bash
-pip install .
-```
-
-This will install the package and the necessary dependencies, including Playwright, Typer, and FastMCP. After installation, Playwright may need to download browser binaries. You can do this by running:
-
-```bash
-uvx playwright install chromium --with-deps --no-shell
-```
+1.  **Sync the environment**:
+    ```bash
+    uv sync --frozen
+    ```
+2.  **Install Playwright browsers**:
+    ```bash
+    uv run playwright install chromium --with-deps
+    ```
 
 ## CLI Usage
 
-The package provides a command-line interface called `google-search-cli`.
+The package provides two CLI tools: `google-search-cli` and `google-search-mcp-cli`.
 
-### Basic Search
+### `google-search-cli`
+
+#### Basic Search
 
 To perform a simple search, run:
 
 ```bash
-google-search-cli "your search query"
+uv run google-search-cli "your search query"
 ```
 
 This will output the search results in JSON format.
 
-### Options
+#### Fetch Markdown
+
+To fetch a URL and convert it to Markdown:
+
+```bash
+uv run google-search-cli fetch-markdown "https://example.com"
+```
+
+#### Options
 
 The CLI supports several options to customize the search:
 
@@ -51,7 +85,15 @@ The CLI supports several options to customize the search:
 Example with options:
 
 ```bash
-google-search-cli "claude 3.5 sonnet" --limit 5 --timeout 60000
+uv run google-search-cli "claude 3.5 sonnet" --limit 5 --timeout 60000
+```
+
+### `google-search-mcp-cli`
+
+This tool allows you to interact with the MCP server from the command line.
+
+```bash
+uv run google-search-mcp-cli --help
 ```
 
 ## MCP Server Usage
@@ -61,10 +103,13 @@ The package also includes an MCP server that exposes the search functionality as
 To start the server, run:
 
 ```bash
-google-search-server
+uv run google-search-mcp-server
 ```
 
-By default, the server will be available at `http://localhost:8000`. You can then interact with it using an MCP client. The server provides a `search` tool that accepts a `query`, `limit`, and `timeout`.
+By default, the server will be available at `http://localhost:8000`. You can then interact with it using an MCP client. The server provides the following tools:
+
+- `search(query: str, limit: int = 10, timeout: int = 60000)`: Performs a Google search.
+- `fetch_markdown(url: str, timeout: int = 60000)`: Fetches a URL and returns its content as Markdown.
 
 ## Acknowledgements
 
