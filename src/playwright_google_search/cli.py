@@ -10,7 +10,7 @@ from .search import google_search, get_google_search_page_html
 APP = typer.Typer(help="A Google search CLI tool based on Playwright", pretty_exceptions_short=True)
 
 
-@APP.command()
+@APP.command("search")
 def google_search_command(
     query: str = typer.Argument(..., help="Search keyword"),
     limit: int = typer.Option(10, "-l", "--limit", help="Limit the number of results"),
