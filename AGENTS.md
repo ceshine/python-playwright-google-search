@@ -42,7 +42,7 @@ When writing or modifying Python code, you **MUST** adhere to the PEP-8 style gu
     3.  Local application/monorepo-specific imports
 - Naming conventions, and whitespace.
 
-Use Google-style dostrings.
+Use Google-style docstrings.
 
 ## Decision Framework
 
