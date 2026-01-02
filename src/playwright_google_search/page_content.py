@@ -18,14 +18,16 @@ from .browser_utils import launch_browser
 LOGGER = logging.getLogger(__name__)
 
 
-async def _render_page_html(url: str, timeout: int, headless: bool = False) -> str:
+async def _render_page_html(
+    url: str, timeout: int, headless: bool = False, wait_until: str = "domcontentloaded"
+) -> str:
     """Render the page at ``url`` in Chromium and return its HTML content."""
 
     async with async_playwright() as playwright:
         browser = await launch_browser(playwright, headless=headless)
         page = await browser.new_page()
         try:
-            _ = await page.goto(url, wait_until="networkidle", timeout=timeout)
+            _ = await page.goto(url, wait_until=wait_until, timeout=timeout)
             return await page.content()
         except PlaywrightTimeoutError:
             LOGGER.warning("Timed out while loading page. Attempting to parse the result anyway: %s", url)
