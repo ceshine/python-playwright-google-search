@@ -64,6 +64,21 @@ SEARCH_INPUT_SELECTORS = [
 ]
 
 
+async def detect_recaptcha(page: Page, headless_mode: bool, timeout: int, stage_desc: str):
+    if any(pattern in page.url for pattern in SORRY_PATTERNS):
+        if headless_mode:
+            raise PlaywrightError(f"Human verification page detected after {stage_desc} while in headless mode...")
+        LOGGER.warning(
+            f"Human verification page detected after {stage_desc}, please complete the verification in the browser...",
+        )
+        # Wait for the user to complete verification and be redirected back to the search page
+        await page.wait_for_url(
+            url=lambda url: all(pattern not in url for pattern in SORRY_PATTERNS),
+            timeout=timeout * 2,
+        )
+        LOGGER.info("Human verification complete, continuing search...")
+
+
 async def _navigate_and_search(
     page: Page, query: str, timeout: int, saved_state: dict[str, Any], headless_mode: bool
 ) -> None:
@@ -110,9 +125,9 @@ async def _navigate_and_search(
     _ = await page.goto(selected_domain, timeout=timeout, wait_until="networkidle")
     LOGGER.info(f"Navigated to {page.url}")
 
+    # Detect ReCAPTCHA
     if any(pattern in page.url for pattern in SORRY_PATTERNS):
-        LOGGER.warning("Human verification page detected on initial navigation.")
-        raise PlaywrightError("Human verification page detected.")
+        await detect_recaptcha(page, headless_mode, timeout, "initial page load")
 
     # Locate the search box
     search_input = None
@@ -133,17 +148,7 @@ async def _navigate_and_search(
 
     # Detect ReCAPTCHA
     if any(pattern in page.url for pattern in SORRY_PATTERNS):
-        if headless_mode:
-            raise PlaywrightError("Human verification page detected after search while in headless mode...")
-        LOGGER.warning(
-            "Human verification page detected after search, please complete the verification in the browser...",
-        )
-        # Wait for the user to complete verification and be redirected back to the search page
-        await page.wait_for_url(
-            url=lambda url: all(pattern not in url for pattern in SORRY_PATTERNS),
-            timeout=timeout * 2,
-        )
-        LOGGER.info("Human verification complete, continuing search...")
+        await detect_recaptcha(page, headless_mode, timeout, "clicking search button")
 
     # Detect search result
     results_found = False
