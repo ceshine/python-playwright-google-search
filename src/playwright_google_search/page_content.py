@@ -23,7 +23,7 @@ async def _render_page_html(
     url: str,
     timeout: int,
     headless: bool = False,
-    wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] | None = "domcontentloaded",
+    wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] | None = "networkidle",
 ) -> str:
     """Render the page at ``url`` in Chromium and return its HTML content."""
 
@@ -35,7 +35,11 @@ async def _render_page_html(
             return await page.content()
         except PlaywrightTimeoutError:
             LOGGER.warning("Timed out while loading page. Attempting to parse the result anyway: %s", url)
-            return await page.content()
+            try:
+                return await page.content()
+            except Exception as e:
+                LOGGER.error("Failed to get the page content after timeout: %s", e)
+                raise e
         finally:
             await browser.close()
 
@@ -53,7 +57,7 @@ async def fetch_page_markdown_async(url: str, timeout: int = 20000, headless: bo
     """Fetch the page at ``url`` and return its Markdown representation."""
 
     try:
-        html = await _render_page_html(url=url, timeout=timeout, headless=headless)
+        html = await _render_page_html(url=url, timeout=timeout, headless=headless, wait_until="networkidle")
     except PlaywrightError as exc:
         raise RuntimeError(f"Failed to load page: {url}") from exc
 
