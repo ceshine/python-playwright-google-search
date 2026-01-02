@@ -42,7 +42,7 @@ To set up the project and install dependencies, follow these steps:
     ```
 2.  **Install Playwright browsers**:
     ```bash
-    uv run playwright install chromium --with-deps
+    uv run playwright install chromium --with-deps --no-shell
     ```
 
 ## CLI Usage
@@ -98,18 +98,70 @@ uv run google-search-mcp-cli --help
 
 ## MCP Server Usage
 
+
+### Overview
+
 The package also includes an MCP server that exposes the search functionality as a tool for agents.
 
-To start the server, run:
+To start the server, run this `uv` command in the project's root folder:
 
 ```bash
 uv run google-search-mcp-server
 ```
 
-By default, the server will be available at `http://localhost:8000`. You can then interact with it using an MCP client. The server provides the following tools:
+or use the code on GitHub via `uvx`:
+
+```bash
+uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-mcp-server
+```
+
+By default, the server uses the STDIO Transport. The server provides the following tools:
 
 - `search(query: str, limit: int = 10, timeout: int = 60000)`: Performs a Google search.
 - `fetch_markdown(url: str, timeout: int = 60000)`: Fetches a URL and returns its content as Markdown.
+
+### Prerequisites for uvx
+
+If you're using `uvx` to run the MCP server, you need to run this command once to install the Playwright dependencies:
+
+```bash
+uvx run playwright install chromium --with-deps --no-shell
+```
+
+Alternatively, you can wrap the installation command in a sh -c call in your MCP configuration file:
+
+```json
+{
+  "command": [
+    "sh",
+    "-c",
+    "uvx playwright install chromium --no-shell && uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-mcp-server"
+  ]
+}
+```
+
+The downside of this approach is that you can't use the --with-deps flag because it requires root privileges. Additionally, it adds minor overhead to check the Playwright installation at every server startup.
+
+### Examples
+
+[OpenCode configuration](https://opencode.ai):
+
+```json
+{
+  "mcp": {
+    "browser_mcp": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/ceshine/python-playwright-google-search.git",
+        "google-search-mcp-server"
+      ]
+    }
+  },
+  "$schema": "https://opencode.ai/config.json"
+}
+```
 
 ## Acknowledgements
 
