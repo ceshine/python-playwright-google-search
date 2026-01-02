@@ -62,7 +62,7 @@ def google_search_command(
                         "htmlPreview": html_result.get("html", "")[:500]
                         + ("..." if len(html_result.get("html", "")) > 500 else ""),
                     }
-                    typer.echo(json.dumps(output_result, indent=2))
+                    typer.echo(json.dumps(output_result, indent=2, ensure_ascii=False))
             else:
                 # Call google_search with explicit parameters to avoid ambiguity.
                 # Pass a literal locale string to avoid type errors from dict lookups.
@@ -75,7 +75,7 @@ def google_search_command(
                     locale="en-US",
                     headless=headless,
                 )
-                typer.echo(json.dumps(results, indent=2))
+                typer.echo(json.dumps(results, indent=2, ensure_ascii=False))
         except Exception as e:
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(code=1)
