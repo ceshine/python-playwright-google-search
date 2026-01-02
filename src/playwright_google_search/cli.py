@@ -90,6 +90,7 @@ def google_search_command(
 def fetch_markdown_command(
     url: str = typer.Argument(..., help="URL to fetch and convert to Markdown"),
     timeout: int = typer.Option(60000, "-t", "--timeout", help="Timeout in milliseconds"),
+    max_n_chars: int = typer.Option(250_000, help="Maximum number of characters to print"),
 ):
     """Render a web page using Playwright and output its Markdown content."""
 
@@ -98,6 +99,9 @@ def fetch_markdown_command(
     except Exception as exc:  # pragma: no cover - surfaces runtime issues to users
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
+
+    if max_n_chars > 0 and len(markdown) > max_n_chars:
+        markdown = markdown[:max_n_chars] + "\n\n... (truncated)"
 
     typer.echo(markdown)
 

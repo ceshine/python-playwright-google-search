@@ -21,10 +21,12 @@ async def search(query: str, limit: int = 10, timeout: int = 60000) -> str:
 
 
 @MCP.tool
-async def fetch_markdown(url: str, timeout: int = 10000) -> str:
+async def fetch_markdown(url: str, timeout: int = 10000, max_n_chars: int = 250_000) -> str:
     """Open the given URL in Chromium and return the page rendered as Markdown."""
-
-    return await fetch_page_markdown_async(url=url, timeout=timeout, headless=HEADLESS)
+    markdown_content = await fetch_page_markdown_async(url=url, timeout=timeout, headless=HEADLESS)
+    if max_n_chars > 0 and len(markdown_content) > max_n_chars:
+        markdown_content = markdown_content[:max_n_chars] + "\n\n... (truncated)"
+    return markdown_content
 
 
 if __name__ == "__main__":
