@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "browser_mcp": {
+      "type": "local",
+      "command": [
+        "uvx",
+        "--from",
+        "git+https://github.com/ceshine/python-playwright-google-search.git",
+        "google-search-mcp-server"
+      ]
+    }
+  },
+  "$schema": "https://opencode.ai/config.json"
+}
