@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from io import BytesIO
+from typing import Literal
 
 from markitdown import MarkItDown, StreamInfo
 from playwright.async_api import (
@@ -19,7 +20,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 async def _render_page_html(
-    url: str, timeout: int, headless: bool = False, wait_until: str = "domcontentloaded"
+    url: str,
+    timeout: int,
+    headless: bool = False,
+    wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] | None = "domcontentloaded",
 ) -> str:
     """Render the page at ``url`` in Chromium and return its HTML content."""
 
