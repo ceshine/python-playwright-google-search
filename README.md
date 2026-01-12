@@ -118,7 +118,7 @@ uvx --from git+https://github.com/ceshine/python-playwright-google-search.git go
 By default, the server uses the STDIO Transport. The server provides the following tools:
 
 - `search(query: str, limit: int = 10, timeout: int = 60000)`: Performs a Google search.
-- `fetch_markdown(url: str, timeout: int = 60000)`: Fetches a URL and returns its content as Markdown.
+- `fetch_markdown(url: str, timeout: int = 60000, max_n_chars: int = 250_000)`: Fetches a URL and returns its content as Markdown.
 
 ### Prerequisites for uvx
 
