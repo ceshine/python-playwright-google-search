@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import asyncio
 import json
+import asyncio
+import logging
 
 import typer
 
@@ -107,4 +108,9 @@ def fetch_markdown_command(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        format="[%(asctime)s][%(levelname)s][%(name)s] %(message)s",
+        level=logging.INFO,
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
     APP()

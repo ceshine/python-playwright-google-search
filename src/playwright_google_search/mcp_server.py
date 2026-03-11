@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 
 from fastmcp import FastMCP
 
@@ -8,6 +9,12 @@ from .page_content import fetch_page_markdown_async
 
 MCP = FastMCP("Google Search 🚀")
 HEADLESS = os.environ.get("HEADLESS", "false").lower().startswith("t")
+
+logging.basicConfig(
+    format="[%(asctime)s][%(levelname)s][%(name)s] %(message)s",
+    level=logging.INFO,
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+)
 
 
 @MCP.tool

@@ -16,8 +16,6 @@ log_dir = Path.home() / ".playwright-google-search"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file_path = log_dir / "google-search.log"
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 LOGGER = logging.getLogger(__name__)
 try:
     handler = logging.FileHandler(log_file_path)
