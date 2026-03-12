@@ -42,7 +42,7 @@ To set up the project and install dependencies, follow these steps:
     ```
 2.  **Install Playwright browsers**:
     ```bash
-    uv run playwright install chromium --with-deps --no-shell
+    uv run playwright install chromium --with-deps
     ```
 
 ## CLI Usage
@@ -125,7 +125,7 @@ By default, the server uses the STDIO Transport. The server provides the followi
 If you're using `uvx` to run the MCP server, you need to run this command once to install the Playwright dependencies:
 
 ```bash
-uvx run playwright install chromium --with-deps --no-shell
+uvx run playwright install chromium --with-deps
 ```
 
 Alternatively, you can wrap the installation command in a sh -c call in your MCP configuration file:
