@@ -82,9 +82,11 @@ async def _render_page_html(
     headless: bool = False,
     wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] | None = "networkidle",
     *,
-    state_file: str = "./browser-state.json",
+    # Using .placeholder because we do not use nor save a state file by default
+    state_file: str = "/tmp/browser-state.json.placeholder",
     locale: str = "en-US",
-    no_save_state: bool = False,
+    # Do not save state by default (saving the state somehow triggers Cloudflare turnstile in some cases)
+    no_save_state: bool = True,
 ) -> str:
     """Render the page at ``url`` in Chromium and return its HTML content."""
 
