@@ -8,10 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from tzlocal import get_localzone
+
 from playwright.async_api import Browser, BrowserContext, Page, Playwright
 
 LOGGER = logging.getLogger(__name__)
 
+FINGERPRINT_SUFFIX = ".fingerprint.json"
 CHROMIUM_LAUNCH_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--disable-features=IsolateOrigins,site-per-process",
@@ -65,8 +68,9 @@ async def create_browser_context(
     storage_state_path_str = str(state_file) if state_file.exists() else None
 
     saved_state: dict[str, Any] = {}
-    fingerprint_file = state_file.with_suffix(".json-fingerprint.json")
+    fingerprint_file = state_file.with_suffix(FINGERPRINT_SUFFIX)
     if fingerprint_file.exists():
+        LOGGER.info("Loading fingerprint from %s", fingerprint_file)
         with open(fingerprint_file, "r", encoding="utf-8") as file:
             saved_state = json.load(file)
             assert isinstance(saved_state, dict)
@@ -88,10 +92,11 @@ async def create_browser_context(
         )
     else:
         now = datetime.now()
+        current_tzinfo = get_localzone()
         host_config = {
             "deviceName": device_name,
             "locale": locale,
-            "timezoneId": "America/New_York",
+            "timezoneId": current_tzinfo.key if current_tzinfo is not None else "America/Los_Angeles",
             "colorScheme": "dark" if 19 <= now.hour or now.hour < 7 else "light",
             "reducedMotion": "no-preference",
             "forcedColors": "none",
@@ -164,7 +169,7 @@ async def persist_state(
         return
 
     _ = await context.storage_state(path=str(state_file_path))
-    fingerprint_file = state_file_path.with_suffix(".json-fingerprint.json")
+    fingerprint_file = state_file_path.with_suffix(FINGERPRINT_SUFFIX)
     with open(fingerprint_file, "w", encoding="utf-8") as file:
         json.dump(saved_state, file, indent=2)
 
