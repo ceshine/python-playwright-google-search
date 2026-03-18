@@ -71,9 +71,15 @@ async def _handle_turnstile_if_present(page: Page, headless: bool, timeout: int)
     if headless:
         raise TurnstileDetectedError("Cloudflare Turnstile detected while running headless.")
 
-    LOGGER.warning("Cloudflare Turnstile detected. Complete verification in the browser to continue.")
-    await _wait_for_turnstile_clear(page, timeout=timeout * 2)
-    LOGGER.info("Cloudflare Turnstile verification complete. Continuing.")
+    try:
+        LOGGER.warning("Cloudflare Turnstile detected. Complete verification in the browser to continue.")
+        await _wait_for_turnstile_clear(page, timeout=timeout * 2)
+        LOGGER.info("Cloudflare Turnstile verification complete. Continuing.")
+    except PlaywrightTimeoutError:
+        LOGGER.warning(
+            "Timed out waiting for Cloudflare Turnstile verification. Attempting to parse the result anyway: %s",
+            page.url,
+        )
 
 
 async def _render_page_html(
@@ -105,19 +111,15 @@ async def _render_page_html(
             try:
                 _ = await page.goto(url, wait_until=wait_until, timeout=timeout)
             except PlaywrightTimeoutError:
-                goto_timed_out = True
                 LOGGER.warning("Timed out while loading page. Attempting to parse the result anyway: %s", url)
 
             await _handle_turnstile_if_present(page, headless=headless, timeout=timeout)
 
-            await persist_state(context, state_file_path, saved_state, no_save_state)
+            if no_save_state is False:
+                await persist_state(context, state_file_path, saved_state)
 
             return await page.content()
-        except PlaywrightTimeoutError:
-            raise
-        except Exception as exc:
-            if goto_timed_out:
-                LOGGER.error("Failed to get the page content after timeout: %s", exc)
+        except TurnstileDetectedError:
             raise
         finally:
             await browser.close()

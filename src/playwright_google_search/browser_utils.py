@@ -162,11 +162,8 @@ async def persist_state(
     context: BrowserContext,
     state_file_path: Path,
     saved_state: dict[str, Any],
-    no_save_state: bool,
 ) -> None:
     """Persist storage state and fingerprint metadata unless saving is disabled."""
-    if no_save_state:
-        return
 
     _ = await context.storage_state(path=str(state_file_path))
     fingerprint_file = state_file_path.with_suffix(FINGERPRINT_SUFFIX)

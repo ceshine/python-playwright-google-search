@@ -267,7 +267,8 @@ async def google_search(
                 await _navigate_and_search(page, query, timeout, saved_state, headless)
                 results = await _extract_results(page, limit)
 
-                await persist_state(context, state_file_path, saved_state, no_save_state)
+                if no_save_state is False:
+                    await persist_state(context, state_file_path, saved_state)
 
                 return {"query": query, "results": results}
 
