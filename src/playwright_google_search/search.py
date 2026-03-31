@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from bs4 import BeautifulSoup
-from playwright.async_api import Error as PlaywrightError, Page, async_playwright
+from patchright.async_api import Error as PlaywrightError, Page, async_playwright
 
 from .browser_utils import launch_browser, persist_state, prepare_context_page
 

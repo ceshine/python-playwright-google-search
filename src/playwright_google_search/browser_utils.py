@@ -10,7 +10,7 @@ from typing import Any
 
 from tzlocal import get_localzone
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright
+from patchright.async_api import Browser, BrowserContext, Page, Playwright
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ CHROMIUM_LAUNCH_ARGS = [
     "--disable-accelerated-2d-canvas",
     "--no-first-run",
     "--no-zygote",
-    "--disable-gpu",
+    # "--disable-gpu",
     "--hide-scrollbars",
     "--mute-audio",
     "--disable-background-networking",
@@ -88,6 +88,7 @@ async def create_browser_context(
                 "locale": saved_state["fingerprint"]["locale"],
                 "timezone_id": saved_state["fingerprint"]["timezoneId"],
                 "color_scheme": saved_state["fingerprint"]["colorScheme"],
+                "no_viewport": True,
             }
         )
     else:
@@ -104,15 +105,19 @@ async def create_browser_context(
         context_options.update(
             {
                 "locale": host_config["locale"],
+                "no_viewport": True,
                 "timezone_id": host_config["timezoneId"],
                 "color_scheme": host_config["colorScheme"],
             }
         )
         saved_state["fingerprint"] = host_config
 
+    # Remove parameters in conflict with `no_viewport`
+    context_options.pop("device_scale_factor", None)
+    context_options.pop("deviceScaleFactor", None)
+
     context_options.update(
         {
-            "viewport": {"width": 1920, "height": 1080},
             "permissions": ["geolocation", "notifications"],
             "accept_downloads": True,
             "is_mobile": False,

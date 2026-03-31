@@ -8,7 +8,7 @@ from io import BytesIO
 from typing import Literal
 
 from markitdown import MarkItDown, StreamInfo
-from playwright.async_api import (
+from patchright.async_api import (
     Error as PlaywrightError,
     Page,
     TimeoutError as PlaywrightTimeoutError,
@@ -148,6 +148,7 @@ async def fetch_page_markdown_async(url: str, timeout: int = 20000, headless: bo
         )
         html = await _render_page_html(url=url, timeout=timeout, headless=False, wait_until="networkidle")
     except PlaywrightError as exc:
+        LOGGER.error(exc)
         raise RuntimeError(f"Failed to load page: {url}") from exc
 
     return convert_html_to_markdown(html=html, url=url)
