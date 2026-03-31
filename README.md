@@ -4,6 +4,8 @@ A Python-based Google Search tool powered by Playwright, providing both a comman
 
 This project is a Python port and enhancement of the original Node.js version from [web-agent-master/google-search](https://github.com/web-agent-master/google-search). It's designed for reliability and flexibility, driving a real browser to deliver accurate, real-time search results.
 
+Note: There's an experimental Patchright version of this tool in the [patchright branch](https://github.com/ceshine/python-playwright-google-search/tree/patchright).
+
 ## Features
 
 - **CLI & MCP Server**: Use it as a standalone CLI or as a tool server for AI agents.
