@@ -1,15 +1,15 @@
+import re
+import random
 import asyncio
 import logging
-import random
-import re
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
 from typing import Any
 
 from bs4 import BeautifulSoup
-from playwright.async_api import Error as PlaywrightError, Page, async_playwright
+from patchright.async_api import Page, Error as PlaywrightError, async_playwright
 
-from .browser_utils import launch_browser, persist_state, prepare_context_page
+from .browser_utils import persist_state, launch_browser, prepare_context_page
 
 # --- Logger Setup ---
 log_dir = Path.home() / ".playwright-google-search"
@@ -119,9 +119,9 @@ async def _navigate_and_search(
         selected_domain = random.choice(GOOGLE_DOMAINS)
         saved_state["googleDomain"] = selected_domain
 
-    LOGGER.info(f"Navigating to {selected_domain}")
-    _ = await page.goto(selected_domain, timeout=timeout, wait_until="networkidle")
-    LOGGER.info(f"Navigated to {page.url}")
+    LOGGER.info("Navigating to %s", selected_domain)
+    _ = await page.goto(selected_domain, timeout=timeout, wait_until="domcontentloaded")
+    LOGGER.info("Navigated to %s", page.url)
 
     # Detect ReCAPTCHA
     if any(pattern in page.url for pattern in SORRY_PATTERNS):
@@ -141,27 +141,62 @@ async def _navigate_and_search(
     await search_input.click()
     await page.keyboard.type(query, delay=random.randint(10, 30))
     await asyncio.sleep(random.randint(100, 300) / 1000)
-    async with page.expect_navigation(wait_until="networkidle", timeout=timeout):
+    async with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout):
         await page.keyboard.press("Enter")
 
     # Detect ReCAPTCHA
     if any(pattern in page.url for pattern in SORRY_PATTERNS):
         await detect_recaptcha(page, headless_mode, timeout, "clicking search button")
 
-    # Detect search result
-    results_found = False
-    for selector in SEARCH_RESULT_SELECTORS:
-        if await page.query_selector(selector):
-            results_found = True
-            break
-
-    if not results_found:
-        raise PlaywrightError("Could not find search results element.")
+    # Wait for any of the known results containers to appear, rather than gating on
+    # network idle (Google keeps long-lived connections open that never settle).
+    try:
+        _ = await page.wait_for_selector(", ".join(SEARCH_RESULT_SELECTORS), timeout=timeout)
+    except PlaywrightError as exc:
+        raise PlaywrightError("Could not find search results element.") from exc
 
     # Search result is available on the current page now
 
 
-async def _extract_results(page: Page, limit: int) -> list[dict[str, str]]:
+NEXT_PAGE_SELECTOR = "a#pnnext"
+
+
+async def _go_to_next_page(page: Page, timeout: int, headless_mode: bool) -> bool:
+    """Click the Google "Next" link to flip to the next results page.
+
+    Uses the literal anchor rather than synthesizing a ``&start=N`` URL so that
+    Google's own continuation tokens (``sa``, ``sstk``, ``ved``) travel with the
+    request — this looks more like a real user click to Google's bot heuristics.
+
+    Args:
+        page: Playwright Page currently sitting on a results page.
+        timeout: Milliseconds to wait for navigation and the results selector.
+        headless_mode: Forwarded to ``detect_recaptcha`` for verification handling.
+
+    Returns:
+        True if a next page loaded and its results container appeared. False if
+        there is no next-page anchor (i.e. we're on the last page).
+    """
+    next_link = await page.query_selector(NEXT_PAGE_SELECTOR)
+    if not next_link:
+        LOGGER.info("No next-page link found; stopping pagination.")
+        return False
+
+    LOGGER.info("Flipping to the next results page.")
+    async with page.expect_navigation(wait_until="domcontentloaded", timeout=timeout):
+        await next_link.click()
+
+    if any(pattern in page.url for pattern in SORRY_PATTERNS):
+        await detect_recaptcha(page, headless_mode, timeout, "flipping to next page")
+
+    try:
+        _ = await page.wait_for_selector(", ".join(SEARCH_RESULT_SELECTORS), timeout=timeout)
+    except PlaywrightError as exc:
+        raise PlaywrightError("Could not find search results element after page flip.") from exc
+    return True
+
+
+async def _extract_results(page: Page, limit: int, seen_urls: set[str] | None = None) -> list[dict[str, str]]:
     """Extract structured search result entries from a Google search results Page.
 
     This asynchronous helper inspects the provided Playwright Page and attempts to
@@ -201,7 +236,8 @@ async def _extract_results(page: Page, limit: int) -> list[dict[str, str]]:
     ]
 
     results: list[dict[str, str]] = []
-    seen_urls: set[str] = set()
+    if seen_urls is None:
+        seen_urls = set()
 
     for selectors in selector_sets:
         if len(results) >= limit:
@@ -265,7 +301,23 @@ async def google_search(
                 ) = await prepare_context_page(p, browser, state_file, locale)
 
                 await _navigate_and_search(page, query, timeout, saved_state, headless)
-                results = await _extract_results(page, limit)
+
+                seen_urls: set[str] = set()
+                results: list[dict[str, str]] = []
+                results.extend(await _extract_results(page, limit, seen_urls))
+
+                while len(results) < limit:
+                    has_next = await _go_to_next_page(page, timeout, headless)
+                    if not has_next:
+                        break
+                    new_results = await _extract_results(page, limit - len(results), seen_urls)
+                    if not new_results:
+                        # Safety net: a page that yields zero new unique URLs means
+                        # we've exhausted useful results even if Google still shows
+                        # a "Next" link.
+                        LOGGER.info("Next page returned no new unique URLs; stopping.")
+                        break
+                    results.extend(new_results)
 
                 if no_save_state is False:
                     await persist_state(context, state_file_path, saved_state)
@@ -281,7 +333,7 @@ async def google_search(
                     else:
                         break
                 else:
-                    LOGGER.error(f"An error occurred during search: {e}")
+                    LOGGER.error("An error occurred during search: %s", e)
                     return {"query": query, "results": [], "error": str(e)}
             finally:
                 if context:
@@ -349,7 +401,8 @@ async def get_google_search_page_html(
                     _ = await page.screenshot(path=str(screenshot_path), full_page=True)
                     result["screenshotPath"] = str(screenshot_path)
 
-                await persist_state(context, state_file_path, saved_state, no_save_state)
+                if no_save_state is False:
+                    await persist_state(context, state_file_path, saved_state)
 
                 return result
 
@@ -359,7 +412,7 @@ async def get_google_search_page_html(
                     headless_mode = False
                     # retry on next loop iteration
                 else:
-                    LOGGER.error(f"An error occurred while getting HTML: {e}")
+                    LOGGER.error("An error occurred while getting HTML: %s", e)
                     return {"query": query, "html": "", "url": "", "error": str(e)}
             finally:
                 if context:

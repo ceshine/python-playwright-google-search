@@ -4,12 +4,11 @@ A Python-based Google Search tool powered by Playwright, providing both a comman
 
 This project is a Python port and enhancement of the original Node.js version from [web-agent-master/google-search](https://github.com/web-agent-master/google-search). It's designed for reliability and flexibility, driving a real browser to deliver accurate, real-time search results.
 
-Note: There's an experimental Patchright version of this tool in the [patchright branch](https://github.com/ceshine/python-playwright-google-search/tree/patchright).
-
 ## Features
 
 - **CLI & MCP Server**: Use it as a standalone CLI or as a tool server for AI agents.
 - **Real Browser Integration**: Leverages Playwright to mimic human-like browsing and avoid blocking.
+- **Automatic Pagination**: Automatically fetches results across multiple Google results pages to satisfy the requested `--limit`.
 - **Markdown Conversion**: Includes a tool to fetch and convert web page content to clean Markdown.
 - **Customizable**: Offers options for headless browsing, session state management, and more.
 
@@ -42,9 +41,9 @@ To set up the project and install dependencies, follow these steps:
     ```bash
     uv sync --frozen
     ```
-2.  **Install Playwright browsers**:
+2.  **Install Chromium for Playwright/Patchright**:
     ```bash
-    uv run playwright install chromium --with-deps
+    uv run patchright install chromium --with-deps
     ```
 
 ## CLI Usage
@@ -77,7 +76,7 @@ The CLI supports several options to customize the search:
 
 - `--limit` or `-l`: Limit the number of search results (default: 10).
 - `--timeout`: Set a timeout in milliseconds for the search (default: 30000).
-- `--headless`: Run the browser in headless mode (default: True). Use `--no-headless` to run with a visible browser window.
+- `--headless`: Run the browser in headless mode (default: False). Headless mode increases the chance of being detected by Google, so a visible browser window is used by default. Use `--headless` to force headless mode.
 - `--state-file`: Specify a path to a browser state file to reuse cookies and other session data.
 - `--save-state`: Save the browser state for the current session (default: True). Use `--no-save-state` to disable.
 - `--get-html`: Get the raw HTML of the search results page instead of parsed results.
