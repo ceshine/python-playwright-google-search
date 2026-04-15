@@ -5,8 +5,8 @@ import logging
 
 import typer
 
-from .page_content import fetch_page_markdown
 from .search import google_search, get_google_search_page_html
+from .page_content import fetch_page_markdown
 
 APP = typer.Typer(help="A Google search CLI tool based on Playwright", pretty_exceptions_short=True)
 
@@ -17,8 +17,8 @@ def google_search_command(
     limit: int = typer.Option(10, "-l", "--limit", help="Limit the number of results"),
     timeout: int = typer.Option(30000, "-t", "--timeout", help="Timeout in milliseconds"),
     headless: bool = typer.Option(
-        True,
-        help="Allow user to explicitly enable or disable headless mode. The default is True (using headless mode).",
+        False,
+        help="Allow user to explicitly enable or disable headless mode. The default is False (headless mode increases the chance of being detected by Google).",
     ),
     state_file: str = typer.Option("./browser-state.json", "--state-file", help="Path to the browser state file"),
     save_state: bool = typer.Option(True, "-s", "--save-state", help="Save browser state for the current session"),
