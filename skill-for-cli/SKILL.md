@@ -32,8 +32,10 @@ uvx --from git+https://github.com/ceshine/python-playwright-google-search.git go
 ### Fetch a page as Markdown
 
 ```bash
-uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli fetch-markdown "<url>" [--max-n-chars 250000]
+uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli fetch-markdown "<url>" [--max-n-chars 250000] [-w 0]
 ```
+
+- `-w` / `--wait`: seconds to wait after the page loads before capturing content. Increase this (e.g. `-w 2` or `-w 5`) if the Markdown looks incomplete or anomalous (lazy-loaded scripts, late-rendered content).
 
 ### Inspect the raw Google results HTML
 
@@ -64,9 +66,9 @@ The two subcommands have **asymmetric** headless defaults. This is intentional; 
 1. Choose `search` (for a query) or `fetch-markdown` (for a specific URL).
 2. Run the command via `Bash` using the `uvx --from git+...` form above, from a stable CWD.
 3. Parse output: JSON for `search`, Markdown text for `fetch-markdown`.
-4. If `fetch-markdown` output ends with `... (truncated)` and the user needs more, re-invoke **once** with a larger `--max-n-chars`. Do not
-   loop.
-5. On exit code ≠ 0:
+4. If `fetch-markdown` output ends with `... (truncated)` and the user needs more, re-invoke **once** with a larger `--max-n-chars`. Do not loop.
+5. If `fetch-markdown` output looks anomalous (e.g. empty, missing expected sections, or clearly incomplete), re-invoke **once** with a higher `-w` value (e.g. `-w 10`) to allow late-rendered content to settle. Do not loop.
+6. On exit code ≠ 0:
    - If stderr mentions a missing Chromium executable, prompt the user
      with the install command above and stop.
    - Otherwise, report the stderr line and stop.

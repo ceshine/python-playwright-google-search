@@ -9,13 +9,13 @@ from typing import Literal
 
 from markitdown import MarkItDown, StreamInfo
 from patchright.async_api import (
-    Error as PlaywrightError,
     Page,
+    Error as PlaywrightError,
     TimeoutError as PlaywrightTimeoutError,
     async_playwright,
 )
 
-from .browser_utils import launch_browser, prepare_context_page, persist_state
+from .browser_utils import persist_state, launch_browser, prepare_context_page
 
 LOGGER = logging.getLogger(__name__)
 
@@ -93,13 +93,13 @@ async def _render_page_html(
     locale: str = "en-US",
     # Do not save state by default (saving the state somehow triggers Cloudflare turnstile in some cases)
     no_save_state: bool = True,
+    wait_seconds: float = 0,
 ) -> str:
     """Render the page at ``url`` in Chromium and return its HTML content."""
 
     async with async_playwright() as playwright:
         browser = await launch_browser(playwright, headless=headless)
 
-        goto_timed_out = False
         try:
             (
                 context,
@@ -118,6 +118,9 @@ async def _render_page_html(
             if no_save_state is False:
                 await persist_state(context, state_file_path, saved_state)
 
+            if wait_seconds > 0:
+                await asyncio.sleep(wait_seconds)
+
             return await page.content()
         except TurnstileDetectedError:
             raise
@@ -134,11 +137,20 @@ def convert_html_to_markdown(html: str, url: str) -> str:
     return markdown_doc.text_content
 
 
-async def fetch_page_markdown_async(url: str, timeout: int = 20000, headless: bool = False) -> str:
-    """Fetch the page at ``url`` and return its Markdown representation."""
+async def fetch_page_markdown_async(
+    url: str, timeout: int = 20000, headless: bool = False, wait_seconds: float = 0
+) -> str:
+    """Fetch the page at ``url`` and return its Markdown representation.
+
+    ``wait_seconds`` defaults to ``0`` so that programmatic callers are not
+    penalised by an implicit sleep. Use the blocking ``fetch_page_markdown``
+    wrapper (or the CLI) when you want a conservative default wait time.
+    """
 
     try:
-        html = await _render_page_html(url=url, timeout=timeout, headless=headless, wait_until="networkidle")
+        html = await _render_page_html(
+            url=url, timeout=timeout, headless=headless, wait_until="networkidle", wait_seconds=wait_seconds
+        )
     except TurnstileDetectedError as exc:
         if not headless:
             raise RuntimeError(f"Failed to load page: {url}") from exc
@@ -146,7 +158,9 @@ async def fetch_page_markdown_async(url: str, timeout: int = 20000, headless: bo
         LOGGER.warning(
             "Cloudflare Turnstile detected in headless mode. Retrying in headed mode for manual verification."
         )
-        html = await _render_page_html(url=url, timeout=timeout, headless=False, wait_until="networkidle")
+        html = await _render_page_html(
+            url=url, timeout=timeout, headless=False, wait_until="networkidle", wait_seconds=wait_seconds
+        )
     except PlaywrightError as exc:
         LOGGER.error(exc)
         raise RuntimeError(f"Failed to load page: {url}") from exc
@@ -154,12 +168,20 @@ async def fetch_page_markdown_async(url: str, timeout: int = 20000, headless: bo
     return convert_html_to_markdown(html=html, url=url)
 
 
-def fetch_page_markdown(url: str, timeout: int = 20000, headless: bool = False) -> str:
-    """Blocking wrapper that returns the Markdown content of ``url``."""
+def fetch_page_markdown(url: str, timeout: int = 20000, headless: bool = False, wait_seconds: float = 5) -> str:
+    """Blocking wrapper that returns the Markdown content of ``url``.
+
+    Defaults ``wait_seconds`` to ``5`` so that interactive CLI users and
+    quick scripts get a safer out-of-the-box experience for pages with
+    late-rendered content. The underlying async function defaults to ``0``
+    to avoid surprising library consumers with an implicit sleep.
+    """
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        return loop.run_until_complete(fetch_page_markdown_async(url=url, timeout=timeout, headless=headless))
+        return loop.run_until_complete(
+            fetch_page_markdown_async(url=url, timeout=timeout, headless=headless, wait_seconds=wait_seconds)
+        )
     finally:
         loop.close()

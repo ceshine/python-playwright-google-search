@@ -93,11 +93,12 @@ def fetch_markdown_command(
     timeout: int = typer.Option(60000, "-t", "--timeout", help="Timeout in milliseconds"),
     max_n_chars: int = typer.Option(250_000, help="Maximum number of characters to print"),
     headless: bool = typer.Option(False, help="Run browser in headless mode"),
+    wait_seconds: float = typer.Option(5, "-w", "--wait", help="Seconds to wait before retrieving page content"),
 ):
     """Render a web page using Playwright and output its Markdown content."""
 
     try:
-        markdown = fetch_page_markdown(url=url, timeout=timeout, headless=headless)
+        markdown = fetch_page_markdown(url=url, timeout=timeout, headless=headless, wait_seconds=wait_seconds)
     except Exception as exc:  # pragma: no cover - surfaces runtime issues to users
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
