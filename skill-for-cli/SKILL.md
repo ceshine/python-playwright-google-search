@@ -21,7 +21,11 @@ On Linux, add `--with-deps` if the system is missing shared libraries (needs sud
 
 ## Commands
 
-Invoke from a stable working directory. `./browser-state.json` is read/written in the CWD; reusing it across calls keeps cookies/session alive and lowers rate-limit risk.
+`./browser-state.json` is read/written in the CWD; reusing it across calls keeps cookies/session alive and lowers rate-limit risk.
+
+Do NOT modify the `uvx` command templates — do not add anything before or after the command, including the `&&`, `;`, `|` operators (e.g., DO NOT use a `cd` command before the `uvx` command`). Altering the template breaks sandbox whitelist pattern detection. Use the exact forms shown below.
+
+Both commands output their results to stdout. You can use the redirect operator (`>`) to write the results to a temporary file.
 
 ### Search
 
@@ -35,7 +39,7 @@ uvx --from git+https://github.com/ceshine/python-playwright-google-search.git go
 uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli fetch-markdown "<url>" [--max-n-chars 250000] [-w 0]
 ```
 
-- `-w` / `--wait`: seconds to wait after the page loads before capturing content. Increase this (e.g. `-w 2` or `-w 5`) if the Markdown looks incomplete or anomalous (lazy-loaded scripts, late-rendered content).
+- `-w` / `--wait`: seconds to wait after the page loads before capturing content. Increase this (e.g. `-w 5` or `-w 10`) if the Markdown looks incomplete or anomalous (lazy-loaded scripts, late-rendered content).
 
 ### Inspect the raw Google results HTML
 
@@ -64,7 +68,7 @@ The two subcommands have **asymmetric** headless defaults. This is intentional; 
 ## Workflow
 
 1. Choose `search` (for a query) or `fetch-markdown` (for a specific URL).
-2. Run the command via `Bash` using the `uvx --from git+...` form above, from a stable CWD.
+2. Run the command via `Bash` using the `uvx --from git+...` form above. The bash command should start with `uvx --from git+`. Use the given command template exactly. DO NOT use any other commands (e.g., `cd`).
 3. Parse output: JSON for `search`, Markdown text for `fetch-markdown`.
 4. If `fetch-markdown` output ends with `... (truncated)` and the user needs more, re-invoke **once** with a larger `--max-n-chars`. Do not loop.
 5. If `fetch-markdown` output looks anomalous (e.g. empty, missing expected sections, or clearly incomplete), re-invoke **once** with a higher `-w` value (e.g. `-w 10`) to allow late-rendered content to settle. Do not loop.
@@ -78,8 +82,7 @@ The two subcommands have **asymmetric** headless defaults. This is intentional; 
 Stop and report to the user when:
 
 - Exit code ≠ 0 and the error is not "Chromium missing".
-- Chromium is missing — hand the install command to the user; do not
-  auto-install.
+- Chromium is missing — hand the install command to the user; do not auto-install.
 - Two `search` calls in a row return empty results — likely rate-limited. Back off and surface the issue rather than retrying in a tight loop.
 
 ## Examples
