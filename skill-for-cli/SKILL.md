@@ -30,16 +30,18 @@ Both commands output their results to stdout. You can use the redirect operator 
 ### Search
 
 ```bash
-uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli search "<query>" [-l 10]
+uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli search "<query>" -t 20000 [-l 10]
 ```
 
 ### Fetch a page as Markdown
 
 ```bash
-uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli fetch-markdown "<url>" [--max-n-chars 250000] [-w 0]
+uvx --from git+https://github.com/ceshine/python-playwright-google-search.git google-search-cli fetch-markdown "<url>" -t 20000 [--max-n-chars 250000] [-w 0]
 ```
 
+- `-t` / `--timeout`: milliseconds to wait before timing out. Increase this (e.g. `-t 20000`) if the search or fetch operation takes too long.
 - `-w` / `--wait`: seconds to wait after the page loads before capturing content. Increase this (e.g. `-w 5` or `-w 10`) if the Markdown looks incomplete or anomalous (lazy-loaded scripts, late-rendered content).
+- **Tool call timeout**: When using these commands inside a tool call (e.g. `Bash`), ensure the tool call's timeout threshold is slightly higher than the sum of `-t` (command timeout) plus `-w` (wait time), otherwise the tool call may be killed before the command finishes.
 
 ### Inspect the raw Google results HTML
 
