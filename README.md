@@ -45,6 +45,11 @@ To set up the project and install dependencies, follow these steps:
     ```bash
     uv run patchright install chromium --with-deps
     ```
+3.  **(Recommended) Install Google Chrome**: Following Patchright's recommendation, the browser is launched with
+    Google Chrome when it is installed, and falls back to the bundled Chromium otherwise.
+    ```bash
+    uv run patchright install chrome
+    ```
 
 ## CLI Usage
 

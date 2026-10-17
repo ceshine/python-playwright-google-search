@@ -298,7 +298,7 @@ async def google_search(
                     page,
                     saved_state,
                     state_file_path,
-                ) = await prepare_context_page(p, browser, state_file, locale)
+                ) = await prepare_context_page(browser, state_file, locale)
 
                 await _navigate_and_search(page, query, timeout, saved_state, headless)
 
@@ -368,7 +368,7 @@ async def get_google_search_page_html(
                     page,
                     saved_state,
                     state_file_path,
-                ) = await prepare_context_page(p, browser, state_file, locale)
+                ) = await prepare_context_page(browser, state_file, locale)
 
                 await _navigate_and_search(page, query, timeout, saved_state, headless_mode)
 
