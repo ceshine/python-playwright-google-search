@@ -1,164 +1,96 @@
-"""Shared utilities for launching Playwright browsers and managing contexts/state."""
+"""Shared utilities for launching Patchright browsers and managing contexts/state.
+
+The browser follows Patchright's recommended setup: Google Chrome with its own flags, viewport and user agent, and no
+fingerprint injection. Custom flags, a user agent from a device profile and spoofed browser properties are inconsistent
+with the real browser, which makes it easier to detect.
+"""
 
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from tzlocal import get_localzone
-
-from patchright.async_api import Browser, BrowserContext, Page, Playwright
+from patchright.async_api import Browser, BrowserContext, Page, Playwright, Error as PlaywrightError
 
 LOGGER = logging.getLogger(__name__)
 
+# Metadata saved next to the state file, such as the Google domain chosen for searches.
 FINGERPRINT_SUFFIX = ".fingerprint.json"
-CHROMIUM_LAUNCH_ARGS = [
-    "--disable-blink-features=AutomationControlled",
-    "--disable-features=IsolateOrigins,site-per-process",
-    "--disable-site-isolation-trials",
-    "--disable-web-security",
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-accelerated-2d-canvas",
-    "--no-first-run",
-    "--no-zygote",
-    # "--disable-gpu",
-    "--hide-scrollbars",
-    "--mute-audio",
-    "--disable-background-networking",
-    "--disable-background-timer-throttling",
-    "--disable-backgrounding-occluded-windows",
-    "--disable-breakpad",
-    "--disable-component-extensions-with-background-pages",
-    "--disable-extensions",
-    "--disable-features=TranslateUI",
-    "--disable-ipc-flooding-protection",
-    "--disable-renderer-backgrounding",
-    "--enable-features=NetworkService,NetworkServiceInProcess",
-    "--force-color-profile=srgb",
-    "--metrics-recording-only",
-]
+# Patchright recommends Google Chrome over the bundled Chromium.
+DEFAULT_CHANNEL = "chrome"
 
 
 async def launch_browser(
     playwright: Playwright,
     headless: bool,
+    channel: str | None = DEFAULT_CHANNEL,
 ) -> Browser:
-    """Launch Chromium with the shared configuration."""
+    """Launch the browser with Patchright's default flags.
+
+    Args:
+        playwright (Playwright): The Patchright instance.
+        headless (bool): Whether to run the browser headless.
+        channel (str | None): Browser channel to try first, e.g. `chrome`. `None` uses the bundled Chromium.
+
+    Returns:
+        Browser: The launched browser. Falls back to the bundled Chromium if `channel` cannot be launched, e.g. because
+            Google Chrome is not installed.
+    """
     LOGGER.info("Launching browser in %s mode...", "headless" if headless else "headed")
 
-    return await playwright.chromium.launch(
-        headless=headless,
-        args=CHROMIUM_LAUNCH_ARGS,
-        ignore_default_args=["--enable-automation"],
-    )
+    if channel is not None:
+        try:
+            return await playwright.chromium.launch(headless=headless, channel=channel)
+        except PlaywrightError as exc:
+            LOGGER.warning(
+                "Could not launch the %r browser channel. Falling back to the bundled Chromium: %s", channel, exc
+            )
+    return await playwright.chromium.launch(headless=headless)
 
 
 async def create_browser_context(
-    playwright: Playwright,
     browser: Browser,
     state_file: Path,
     locale: str,
 ) -> tuple[BrowserContext, dict[str, Any]]:
-    """Create a browser context with fingerprinting metadata restored when available."""
-    storage_state_path_str = str(state_file) if state_file.exists() else None
+    """Create a browser context with the browser's own viewport and user agent.
 
+    Args:
+        browser (Browser): The browser to create the context in.
+        state_file (Path): Storage state (cookies, local storage) to restore, if the file exists.
+        locale (str): Browser locale, e.g. `en-US`.
+
+    Returns:
+        tuple[BrowserContext, dict[str, Any]]: The context, and the metadata saved next to the state file.
+    """
     saved_state: dict[str, Any] = {}
     fingerprint_file = state_file.with_suffix(FINGERPRINT_SUFFIX)
     if fingerprint_file.exists():
-        LOGGER.info("Loading fingerprint from %s", fingerprint_file)
+        LOGGER.info("Loading saved metadata from %s", fingerprint_file)
         with open(fingerprint_file, "r", encoding="utf-8") as file:
             saved_state = json.load(file)
             assert isinstance(saved_state, dict)
+    # Emulated fingerprints are no longer used. Drop the ones saved by earlier versions.
+    _ = saved_state.pop("fingerprint", None)
 
-    device_name = saved_state.get("fingerprint", {}).get("deviceName")
-    if not device_name or device_name not in playwright.devices:
-        device_name = "Desktop Chrome"
-
-    device_config = playwright.devices[device_name]
-    context_options = {**device_config}
-
-    if "fingerprint" in saved_state:
-        context_options.update(
-            {
-                "locale": saved_state["fingerprint"]["locale"],
-                "timezone_id": saved_state["fingerprint"]["timezoneId"],
-                "color_scheme": saved_state["fingerprint"]["colorScheme"],
-                "no_viewport": True,
-            }
-        )
-    else:
-        now = datetime.now()
-        current_tzinfo = get_localzone()
-        host_config = {
-            "deviceName": device_name,
-            "locale": locale,
-            "timezoneId": current_tzinfo.key if current_tzinfo is not None else "America/Los_Angeles",
-            "colorScheme": "dark" if 19 <= now.hour or now.hour < 7 else "light",
-            "reducedMotion": "no-preference",
-            "forcedColors": "none",
-        }
-        context_options.update(
-            {
-                "locale": host_config["locale"],
-                "no_viewport": True,
-                "timezone_id": host_config["timezoneId"],
-                "color_scheme": host_config["colorScheme"],
-            }
-        )
-        saved_state["fingerprint"] = host_config
-
-    # Remove parameters in conflict with `no_viewport`
-    context_options.pop("device_scale_factor", None)
-    context_options.pop("deviceScaleFactor", None)
-
-    context_options.update(
-        {
-            "permissions": ["geolocation", "notifications"],
-            "accept_downloads": True,
-            "is_mobile": False,
-            "has_touch": False,
-            "java_script_enabled": True,
-        }
-    )
-
-    if storage_state_path_str:
-        context_options["storage_state"] = storage_state_path_str
-
-    context = await browser.new_context(**context_options)
-
-    await context.add_init_script(
-        """
-        Object.defineProperty(navigator, 'webdriver', { get: () => false });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        window.chrome = { runtime: {}, loadTimes: function() {}, csi: function() {}, app: {} };
-        if (typeof WebGLRenderingContext !== 'undefined') {
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                if (parameter === 37445) { return 'Intel Inc.'; }
-                if (parameter === 37446) { return 'Intel Iris OpenGL Engine'; }
-                return getParameter.call(this, parameter);
-            };
-        }
-        """
+    context = await browser.new_context(
+        no_viewport=True,
+        locale=locale,
+        storage_state=str(state_file) if state_file.exists() else None,
     )
     return context, saved_state
 
 
 async def prepare_context_page(
-    playwright: Playwright,
     browser: Browser,
     state_file: str,
     locale: str,
 ) -> tuple[BrowserContext, Page, dict[str, Any], Path]:
     """Construct a fresh page along with the loaded browser context and metadata."""
     state_file_path = Path(state_file)
-    context, saved_state = await create_browser_context(playwright, browser, state_file_path, locale)
+    context, saved_state = await create_browser_context(browser, state_file_path, locale)
     page = await context.new_page()
     return context, page, saved_state, state_file_path
 
@@ -168,7 +100,7 @@ async def persist_state(
     state_file_path: Path,
     saved_state: dict[str, Any],
 ) -> None:
-    """Persist storage state and fingerprint metadata unless saving is disabled."""
+    """Persist storage state and the metadata saved next to it."""
 
     _ = await context.storage_state(path=str(state_file_path))
     fingerprint_file = state_file_path.with_suffix(FINGERPRINT_SUFFIX)
@@ -177,7 +109,7 @@ async def persist_state(
 
 
 __all__ = [
-    "CHROMIUM_LAUNCH_ARGS",
+    "DEFAULT_CHANNEL",
     "create_browser_context",
     "launch_browser",
     "persist_state",

@@ -135,7 +135,7 @@ async def _render_page_html(
                 page,
                 saved_state,
                 state_file_path,
-            ) = await prepare_context_page(playwright, browser, state_file, locale)
+            ) = await prepare_context_page(browser, state_file, locale)
 
             try:
                 _ = await page.goto(url, wait_until=wait_until, timeout=timeout)
