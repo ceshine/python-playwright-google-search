@@ -19,16 +19,13 @@ from .browser_utils import persist_state, launch_browser, prepare_context_page
 
 LOGGER = logging.getLogger(__name__)
 
-TURNSTILE_URL_PATTERNS = [
-    "challenges.cloudflare.com",
-    "cf-chl",
-]
-TURNSTILE_SELECTORS = [
-    ".cf-turnstile",
-    "iframe[src*='challenges.cloudflare.com']",
-    "iframe[src*='turnstile']",
-    "input[name='cf-turnstile-response']",
-]
+WaitUntil = Literal["commit", "domcontentloaded", "load", "networkidle"]
+LoadState = Literal["domcontentloaded", "load", "networkidle"]
+
+# Every Cloudflare challenge page (managed, JS and interactive) defines `window._cf_chl_opt` in an inline script.
+# Normal pages that merely embed a Turnstile widget do not, so they are not treated as blocked.
+# Patchright evaluates scripts in an isolated world where page variables are not visible, so match the script text.
+IS_CHALLENGE_JS = "() => [...document.scripts].some((script) => script.text.includes('_cf_chl_opt'))"
 
 
 class TurnstileDetectedError(RuntimeError):
@@ -36,35 +33,65 @@ class TurnstileDetectedError(RuntimeError):
 
 
 async def _page_has_turnstile(page: Page) -> bool:
-    if any(pattern in page.url for pattern in TURNSTILE_URL_PATTERNS):
-        return True
+    """Check whether the page is a Cloudflare challenge page.
 
-    for selector in TURNSTILE_SELECTORS:
-        if await page.query_selector(selector):
-            return True
+    Args:
+        page (Page): The page to inspect.
 
-    content = await page.content()
-    return "cf-turnstile" in content or "challenges.cloudflare.com/turnstile" in content
+    Returns:
+        bool: True if the page is a Cloudflare challenge page.
+    """
+    return bool(await page.evaluate(IS_CHALLENGE_JS))
 
 
 async def _wait_for_turnstile_clear(page: Page, timeout: int) -> None:
-    _ = await page.wait_for_function(
-        """
-        () => {
-            const blockedUrl = /challenges\\.cloudflare\\.com|cf-chl/i.test(location.href);
-            const hasWidget =
-                document.querySelector('.cf-turnstile') ||
-                document.querySelector('iframe[src*="challenges.cloudflare.com"]') ||
-                document.querySelector('iframe[src*="turnstile"]') ||
-                document.querySelector('input[name="cf-turnstile-response"]');
-            return !blockedUrl && !hasWidget;
-        }
-        """,
-        timeout=timeout,
-    )
+    """Wait until the Cloudflare challenge page has been replaced by another page.
+
+    Args:
+        page (Page): The page showing the challenge.
+        timeout (int): Maximum time to wait, in milliseconds.
+
+    Raises:
+        PlaywrightTimeoutError: If the challenge page is still showing after `timeout`.
+    """
+    _ = await page.wait_for_function(f"() => !({IS_CHALLENGE_JS})()", timeout=timeout)
 
 
-async def _handle_turnstile_if_present(page: Page, headless: bool, timeout: int) -> None:
+def _load_state_after_turnstile(wait_until: WaitUntil | None) -> LoadState:
+    """Pick the load state to wait for once the real page replaces the challenge.
+
+    Args:
+        wait_until (WaitUntil | None): The `wait_until` value used for the initial navigation.
+
+    Returns:
+        LoadState: The same state as `wait_until`, or `load` for `commit` and `None`, which
+            `Page.wait_for_load_state` does not accept.
+    """
+    if wait_until is None or wait_until == "commit":
+        return "load"
+    return wait_until
+
+
+async def _handle_turnstile_if_present(
+    page: Page,
+    headless: bool,
+    timeout: int,
+    wait_until: WaitUntil | None,
+) -> None:
+    """Wait for the user to pass a Cloudflare challenge in the browser window, if the page shows one.
+
+    A timeout is logged rather than raised, so that the caller can still parse the page and verify the result.
+
+    Args:
+        page (Page): The page to inspect.
+        headless (bool): Whether the browser is headless. A challenge cannot be passed in headless mode.
+        timeout (int): The navigation timeout, in milliseconds. The user gets twice this time to pass the challenge.
+        wait_until (WaitUntil | None): The `wait_until` value used for the initial navigation. The real page is
+            awaited to the same state.
+
+    Raises:
+        TurnstileDetectedError: If the page shows a challenge while running headless.
+    """
     if not await _page_has_turnstile(page):
         return
 
@@ -74,6 +101,8 @@ async def _handle_turnstile_if_present(page: Page, headless: bool, timeout: int)
     try:
         LOGGER.warning("Cloudflare Turnstile detected. Complete verification in the browser to continue.")
         await _wait_for_turnstile_clear(page, timeout=timeout * 2)
+        # The wait ends as soon as the real page replaces the challenge, before the real page has loaded.
+        await page.wait_for_load_state(_load_state_after_turnstile(wait_until), timeout=timeout)
         LOGGER.info("Cloudflare Turnstile verification complete. Continuing.")
     except PlaywrightTimeoutError:
         LOGGER.warning(
@@ -86,7 +115,7 @@ async def _render_page_html(
     url: str,
     timeout: int,
     headless: bool = False,
-    wait_until: Literal["commit", "domcontentloaded", "load", "networkidle"] | None = "networkidle",
+    wait_until: WaitUntil | None = "networkidle",
     *,
     # Using .placeholder because we do not use nor save a state file by default
     state_file: str = "/tmp/browser-state.json.placeholder",
@@ -113,7 +142,7 @@ async def _render_page_html(
             except PlaywrightTimeoutError:
                 LOGGER.warning("Timed out while loading page. Attempting to parse the result anyway: %s", url)
 
-            await _handle_turnstile_if_present(page, headless=headless, timeout=timeout)
+            await _handle_turnstile_if_present(page, headless=headless, timeout=timeout, wait_until=wait_until)
 
             if no_save_state is False:
                 await persist_state(context, state_file_path, saved_state)
@@ -122,10 +151,33 @@ async def _render_page_html(
                 await asyncio.sleep(wait_seconds)
 
             return await page.content()
-        except TurnstileDetectedError:
-            raise
         finally:
             await browser.close()
+
+
+async def _render_page_html_with_headed_fallback(url: str, timeout: int, headless: bool, wait_seconds: float) -> str:
+    """Render the page, retrying in headed mode if a headless run hits a Cloudflare challenge.
+
+    Args:
+        url (str): The URL to open.
+        timeout (int): The navigation timeout, in milliseconds.
+        headless (bool): Whether to try headless mode first.
+        wait_seconds (float): Extra time to wait before reading the page, in seconds.
+
+    Returns:
+        str: The HTML of the page.
+    """
+    try:
+        return await _render_page_html(
+            url=url, timeout=timeout, headless=headless, wait_until="networkidle", wait_seconds=wait_seconds
+        )
+    except TurnstileDetectedError:
+        LOGGER.warning(
+            "Cloudflare Turnstile detected in headless mode. Retrying in headed mode for manual verification."
+        )
+        return await _render_page_html(
+            url=url, timeout=timeout, headless=False, wait_until="networkidle", wait_seconds=wait_seconds
+        )
 
 
 def convert_html_to_markdown(html: str, url: str) -> str:
@@ -148,18 +200,8 @@ async def fetch_page_markdown_async(
     """
 
     try:
-        html = await _render_page_html(
-            url=url, timeout=timeout, headless=headless, wait_until="networkidle", wait_seconds=wait_seconds
-        )
-    except TurnstileDetectedError as exc:
-        if not headless:
-            raise RuntimeError(f"Failed to load page: {url}") from exc
-
-        LOGGER.warning(
-            "Cloudflare Turnstile detected in headless mode. Retrying in headed mode for manual verification."
-        )
-        html = await _render_page_html(
-            url=url, timeout=timeout, headless=False, wait_until="networkidle", wait_seconds=wait_seconds
+        html = await _render_page_html_with_headed_fallback(
+            url=url, timeout=timeout, headless=headless, wait_seconds=wait_seconds
         )
     except PlaywrightError as exc:
         LOGGER.error(exc)
